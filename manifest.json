@@ -1,6 +1,6 @@
 {
-  "name": "Swagger toolbox",
-  "short_name": "Swagger-toolbox",
+  "name": "JSON Schema Toolbox",
+  "short_name": "json-schema-toolbox",
   "display": "standalone",
   "start_url": "/",
   "background_color": "#fff",
@@ -52,5 +52,5 @@
   "lang": "en",
   "orientation": "any",
   "description":
-    "Utility that saves time by converting json to swagger compatible yaml models"
+    "Utility that converts JSON data to JSON/YAML model schema"
 }
