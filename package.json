@@ -1,0 +1,27 @@
+{
+  "name": "json-schema-toolbox",
+  "version": "1.0.0",
+  "description": "Utility that converts JSON data to JSON/YAML model schema",
+  "main": "build.js",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/json-schema-toolbox/json-schema-toolbox.github.io.git"
+  },
+  "keywords": [
+    "yaml schema",
+    "json schema",
+    "model schema"
+  ],
+  "author": "Arafat Husayn <hello@arafat.dev>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/json-schema-toolbox/json-schema-toolbox.github.io/issues"
+  },
+  "homepage": "https://github.com/json-schema-toolbox/json-schema-toolbox.github.io#readme",
+  "dependencies": {
+    "fast-glob": "^3.1.1"
+  }
+}
