@@ -124,7 +124,9 @@ function handleArrayData(data, x, op, value) {
 
   if (includeRequiredBoolean) op.properties[x].required = true;
 
-  if (showExample === true) op.properties[x].example = value;
+  if (showExample === true && op.properties[x].items.type !== "array") {
+    op.properties[x].example = value;
+  }
 
   return {
     op: op,
