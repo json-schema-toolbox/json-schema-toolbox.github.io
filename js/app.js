@@ -86,20 +86,35 @@ function tryParseJSON(jsonString) {
   return false;
 }
 
-function handleArrayData(data, x, op, value) {
-  typeData = typeOf(data[x][0]);
+function handleArrayData(data) {
+  var typeData = typeOf(data);
+  var opProp;
+
+  /* var notSameType = data.find(function(p) {
+    return typeOf(p) != typeData;
+  });
+
+  if (notSameType) {
+    typeData = data
+      .map(function(p) {
+        return typeOf(p);
+      })
+      .filter(function(item, i, ar) {
+        return ar.indexOf(item) === i;
+      });
+  } */
 
   if (typeData == "undefined") {
     typeData = false;
   }
 
   if (typeData === "object") {
-    op.properties[x] = {
+    opProp = {
       type: "array",
       items: {
         type: typeData,
         properties: buildJSONSchema(
-          data[x][0],
+          data,
           includeRequiredArray,
           includeRequiredBoolean,
           shouldAddNullType
@@ -108,12 +123,12 @@ function handleArrayData(data, x, op, value) {
     };
 
     return {
-      op: op,
+      opProp: opProp,
       typeData: typeData,
     };
   }
 
-  op.properties[x] = {
+  opProp = {
     type: "array",
     items: typeData
       ? {
@@ -122,15 +137,10 @@ function handleArrayData(data, x, op, value) {
       : undefined,
   };
 
-  if (includeRequiredBoolean) op.properties[x].required = true;
-
-  if (showExample === true && op.properties[x].items.type !== "array") {
-    op.properties[x].example = value;
-  }
-
   return {
-    op: op,
+    opProp: opProp,
     typeData: typeData,
+    tempData: data,
   };
 }
 
@@ -165,15 +175,65 @@ function buildJSONSchema(
     } else {
       switch (typeData) {
         case "array":
-          var result;
+          var opProps = [];
 
-          do {
-            result = handleArrayData(data, x, op, value);
+          k = 0;
+          // for (var k = 0; k < data[x].length; k++) {
+            var result;
+            var tempData = data[x][k];
 
-            op = result.op;
+            while (typeData == "array") {
+              result = handleArrayData(tempData);
 
-            typeData = result.typeData;
-          } while (false);
+              opProps.push(result.opProp);
+
+              typeData = result.typeData;
+
+              tempData = result.tempData;
+            }
+          // }
+
+          console.log(opProps);
+
+          break;
+
+          var opPropsLength = opProps.length;
+
+          var objectWithNestedProps = {
+            items: {},
+          };
+
+          for (var i = 0; i < opPropsLength; i++) {
+            if (i == 0) {
+              op.properties[x] = opProps[0];
+
+              objectWithNestedProps = objectWithNestedProps.items = opProps[0];
+            } else {
+              objectWithNestedProps = objectWithNestedProps.items = opProps[i];
+
+              if (i == opPropsLength - 1) {
+                if (
+                  showExample === true &&
+                  (objectWithNestedProps.items.type == "string" ||
+                    objectWithNestedProps.items.type == "number" ||
+                    objectWithNestedProps.items.type == "boolean")
+                ) {
+                  objectWithNestedProps.items.example = value[0];
+                }
+
+                if (
+                  includeRequiredBoolean &&
+                  (objectWithNestedProps.items.type == "string" ||
+                    objectWithNestedProps.items.type == "number" ||
+                    objectWithNestedProps.items.type == "boolean")
+                ) {
+                  objectWithNestedProps.items.required = true;
+                }
+              }
+            }
+
+            value = value[0];
+          }
 
           break;
         case "object":
@@ -183,9 +243,8 @@ function buildJSONSchema(
             includeRequiredBoolean,
             shouldAddNullType
           );
-          op.properties[x].type = "object";
 
-          if (includeRequiredBoolean) op.properties[x].required = true;
+          op.properties[x].type = "object";
 
           break;
         case "null":
