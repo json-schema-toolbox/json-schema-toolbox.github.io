@@ -86,7 +86,7 @@ function tryParseJSON(jsonString) {
   return false;
 }
 
-function handleArrayData(data, previousOp) {
+function handleArrayData(data, depth) {
   if (!(data instanceof Array)) {
     return handleArrayData([data]);
   }
@@ -109,46 +109,63 @@ function handleArrayData(data, previousOp) {
         return self.indexOf(value) === index;
       });
 
-    // console.log("notSameTypeArray", notSameTypeArray);
+    if (notSameTypeArray.length > 1) {
+      typeData = notSameTypeArray;
+    }
   }
 
-  // var arrayInData = data.filter(function(p) {
-  //   return typeOf(p) == "array";
-  // })[0];
+  var arrayInArray = data.filter(function(p) {
+    return typeOf(p) == "array" && p.length > 0;
+  });
 
-  // if (arrayInData) {
-  //   if (!previousOp || !previousOp.items) {
-  //     previousOp = {
-  //       type: "array",
-  //       items: {},
-  //     };
-  //   }
+  var results;
 
-  //   previousOp = buildJSONSchema(
-  //     arrayInData,
-  //     includeRequiredArray,
-  //     includeRequiredBoolean,
-  //     shouldAddNullType,
-  //     notSameTypeArray
-  //   );
+  if (arrayInArray && arrayInArray.length > 0) {
+    for (var arr of arrayInArray) {
+      depth.count++;
 
-  //   console.log("previousOp", previousOp);
+      results = handleArrayData(arr, depth);
+    }
 
-  //   return handleArrayData(arrayInData, previousOp);
-  // }
+    results.depth = depth.count;
+
+    return results;
+  }
 
   if (typeData == "undefined") {
     typeData = false;
   }
 
-  if (typeData === "object") {
+  if (typeData instanceof Array && typeData.indexOf("object") != -1) {
+    var thatObject = data.find(function(itm) {
+      return typeOf(itm) == "object";
+    });
+
     opProp = {
       type: "array",
       items: {
-        type:
-          notSameTypeArray && notSameTypeArray.length > 1
-            ? notSameTypeArray
-            : typeData,
+        type: "object",
+        properties: buildJSONSchema(
+          thatObject,
+          includeRequiredArray,
+          includeRequiredBoolean,
+          shouldAddNullType,
+          notSameTypeArray
+        ).properties,
+      },
+    };
+
+    return {
+      opProp: opProp,
+      typeData: typeData,
+    };
+  }
+
+  if (typeData == "object") {
+    opProp = {
+      type: "array",
+      items: {
+        type: "object",
         properties: buildJSONSchema(
           data[0],
           includeRequiredArray,
@@ -169,20 +186,14 @@ function handleArrayData(data, previousOp) {
     type: "array",
     items: typeData
       ? {
-          type:
-            notSameTypeArray && notSameTypeArray.length > 1
-              ? notSameTypeArray
-              : typeData,
+          type: typeData,
         }
       : undefined,
   };
 
   return {
     opProp: opProp,
-    typeData:
-      notSameTypeArray && notSameTypeArray.length > 1
-        ? notSameTypeArray
-        : typeData,
+    typeData: typeData,
     tempData: data[0],
   };
 }
@@ -191,8 +202,7 @@ function buildJSONSchema(
   data,
   includeRequiredArray,
   includeRequiredBoolean,
-  shouldAddNullType,
-  typeArray
+  shouldAddNullType
 ) {
   var keys = Object.keys(data);
 
@@ -206,7 +216,7 @@ function buildJSONSchema(
 
   keys.forEach(function(x) {
     var value = data[x];
-    var typeData = typeArray || typeOf(value);
+    var typeData = typeOf(value);
 
     if (["array", "object", "null"].indexOf(typeData) === -1) {
       op.properties[x] = {
@@ -223,15 +233,38 @@ function buildJSONSchema(
           var opProps = [];
           var result;
           var tempData = data[x];
+          op.properties[x] = {};
 
           while (typeData == "array" || typeData instanceof Array) {
-            result = handleArrayData(tempData);
+            var depth = {
+              count: 0,
+            };
 
-            if (result instanceof Array) {
-              console.log("result", result[0]);
+            result = handleArrayData(tempData, depth);
 
-              for (var singleResult of result[0]) {
-                opProps.push(singleResult.opProp);
+            if (result.typeData instanceof Array) {
+              for (var dc = 0; dc < result.depth; dc++) {
+                var nested = {
+                  type: "array",
+                };
+
+                if (dc == result.depth - 1) {
+                  nested.anyOf = result.typeData.map(function(t) {
+                    if (t == "object") {
+                      return {
+                        type: "object",
+                        properties:
+                          result.opProp.items && result.opProp.items.properties,
+                      };
+                    } else {
+                      return {
+                        type: t,
+                      };
+                    }
+                  });
+                }
+
+                op.properties[x].items = op.properties[x] = nested;
               }
 
               break;
@@ -244,44 +277,46 @@ function buildJSONSchema(
             }
           }
 
-          console.log("onProps", opProps);
+          if (!op.properties[x].anyOf) {
+            var opPropsLength = opProps.length;
 
-          var opPropsLength = opProps.length;
+            var objectWithNestedProps = {
+              items: {},
+            };
 
-          var objectWithNestedProps = {
-            items: {},
-          };
+            for (var i = 0; i < opPropsLength; i++) {
+              if (i == 0) {
+                op.properties[x] = opProps[0];
 
-          for (var i = 0; i < opPropsLength; i++) {
-            if (i == 0) {
-              op.properties[x] = opProps[0];
+                objectWithNestedProps = objectWithNestedProps.items =
+                  opProps[0];
+              } else {
+                objectWithNestedProps = objectWithNestedProps.items =
+                  opProps[i];
 
-              objectWithNestedProps = objectWithNestedProps.items = opProps[0];
-            } else {
-              objectWithNestedProps = objectWithNestedProps.items = opProps[i];
+                if (i == opPropsLength - 1) {
+                  if (
+                    showExample === true &&
+                    (objectWithNestedProps.items.type == "string" ||
+                      objectWithNestedProps.items.type == "number" ||
+                      objectWithNestedProps.items.type == "boolean")
+                  ) {
+                    objectWithNestedProps.items.example = value[0];
+                  }
 
-              if (i == opPropsLength - 1) {
-                if (
-                  showExample === true &&
-                  (objectWithNestedProps.items.type == "string" ||
-                    objectWithNestedProps.items.type == "number" ||
-                    objectWithNestedProps.items.type == "boolean")
-                ) {
-                  objectWithNestedProps.items.example = value[0];
-                }
-
-                if (
-                  includeRequiredBoolean &&
-                  (objectWithNestedProps.items.type == "string" ||
-                    objectWithNestedProps.items.type == "number" ||
-                    objectWithNestedProps.items.type == "boolean")
-                ) {
-                  objectWithNestedProps.items.required = true;
+                  if (
+                    includeRequiredBoolean &&
+                    (objectWithNestedProps.items.type == "string" ||
+                      objectWithNestedProps.items.type == "number" ||
+                      objectWithNestedProps.items.type == "boolean")
+                  ) {
+                    objectWithNestedProps.items.required = true;
+                  }
                 }
               }
-            }
 
-            value = value[0];
+              value = value[0];
+            }
           }
 
           break;
@@ -291,11 +326,10 @@ function buildJSONSchema(
             data[x],
             includeRequiredArray,
             includeRequiredBoolean,
-            shouldAddNullType,
-            typeArray
+            shouldAddNullType
           );
 
-          op.properties[x].type = typeArray || "object";
+          op.properties[x].type = "object";
 
           break;
         case "null":
@@ -307,7 +341,7 @@ function buildJSONSchema(
           op.properties[x].nullable = true;
 
           if (shouldAddNullType) {
-            op.properties[x].type = typeArray || "null";
+            op.properties[x].type = "null";
           }
 
           if (includeRequiredBoolean) op.properties[x].required = true;
