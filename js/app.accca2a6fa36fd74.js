@@ -87,15 +87,15 @@ function tryParseJSON(jsonString) {
 }
 
 function handleArrayData(data) {
-  var typeData = typeOf(data);
+  var typeData = typeOf(data[0]);
   var opProp;
 
-  /* var notSameType = data.find(function(p) {
+  /* var notSameType = data[0].find(function(p) {
     return typeOf(p) != typeData;
   });
 
   if (notSameType) {
-    typeData = data
+    typeData = data[0]
       .map(function(p) {
         return typeOf(p);
       })
@@ -114,7 +114,7 @@ function handleArrayData(data) {
       items: {
         type: typeData,
         properties: buildJSONSchema(
-          data,
+          data[0],
           includeRequiredArray,
           includeRequiredBoolean,
           shouldAddNullType
@@ -140,7 +140,7 @@ function handleArrayData(data) {
   return {
     opProp: opProp,
     typeData: typeData,
-    tempData: data,
+    tempData: data[0],
   };
 }
 
@@ -176,25 +176,18 @@ function buildJSONSchema(
       switch (typeData) {
         case "array":
           var opProps = [];
+          var result;
+          var tempData = data[x];
 
-          for (var k = 0; k < data[x].length; k++) {
-            var result;
-            var tempData = data[x][k];
+          while (typeData == "array") {
+            result = handleArrayData(tempData);
 
-            while (typeData == "array") {
-              result = handleArrayData(tempData);
+            opProps.push(result.opProp);
 
-              opProps.push(result.opProp);
+            typeData = result.typeData;
 
-              typeData = result.typeData;
-
-              tempData = result.tempData;
-            }
+            tempData = result.tempData;
           }
-
-          console.log(opProps);
-
-          break;
 
           var opPropsLength = opProps.length;
 
