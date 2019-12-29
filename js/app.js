@@ -86,23 +86,56 @@ function tryParseJSON(jsonString) {
   return false;
 }
 
-function handleArrayData(data) {
+function handleArrayData(data, previousOp) {
+  if (!(data instanceof Array)) {
+    return handleArrayData([data]);
+  }
+
   var typeData = typeOf(data[0]);
   var opProp;
 
-  /* var notSameType = data[0].find(function(p) {
-    return typeOf(p) != typeData;
-  });
+  var notSameTypeArray = [];
 
-  if (notSameType) {
-    typeData = data[0]
+  if (data.length > 1) {
+    notSameTypeArray = data
+      .filter(function(p) {
+        return typeOf(p) != typeData;
+      })
+      .concat(data[0])
       .map(function(p) {
         return typeOf(p);
       })
-      .filter(function(item, i, ar) {
-        return ar.indexOf(item) === i;
+      .filter(function(value, index, self) {
+        return self.indexOf(value) === index;
       });
-  } */
+
+    // console.log("notSameTypeArray", notSameTypeArray);
+  }
+
+  // var arrayInData = data.filter(function(p) {
+  //   return typeOf(p) == "array";
+  // })[0];
+
+  // if (arrayInData) {
+  //   if (!previousOp || !previousOp.items) {
+  //     previousOp = {
+  //       type: "array",
+  //       items: {},
+  //     };
+  //   }
+
+  //   previousOp = buildJSONSchema(
+  //     arrayInData,
+  //     includeRequiredArray,
+  //     includeRequiredBoolean,
+  //     shouldAddNullType,
+  //     notSameTypeArray
+  //   );
+
+  //   console.log("previousOp", previousOp);
+
+  //   return handleArrayData(arrayInData, previousOp);
+  // }
 
   if (typeData == "undefined") {
     typeData = false;
@@ -112,12 +145,16 @@ function handleArrayData(data) {
     opProp = {
       type: "array",
       items: {
-        type: typeData,
+        type:
+          notSameTypeArray && notSameTypeArray.length > 1
+            ? notSameTypeArray
+            : typeData,
         properties: buildJSONSchema(
           data[0],
           includeRequiredArray,
           includeRequiredBoolean,
-          shouldAddNullType
+          shouldAddNullType,
+          notSameTypeArray
         ).properties,
       },
     };
@@ -132,14 +169,20 @@ function handleArrayData(data) {
     type: "array",
     items: typeData
       ? {
-          type: typeData,
+          type:
+            notSameTypeArray && notSameTypeArray.length > 1
+              ? notSameTypeArray
+              : typeData,
         }
       : undefined,
   };
 
   return {
     opProp: opProp,
-    typeData: typeData,
+    typeData:
+      notSameTypeArray && notSameTypeArray.length > 1
+        ? notSameTypeArray
+        : typeData,
     tempData: data[0],
   };
 }
@@ -148,7 +191,8 @@ function buildJSONSchema(
   data,
   includeRequiredArray,
   includeRequiredBoolean,
-  shouldAddNullType
+  shouldAddNullType,
+  typeArray
 ) {
   var keys = Object.keys(data);
 
@@ -162,7 +206,7 @@ function buildJSONSchema(
 
   keys.forEach(function(x) {
     var value = data[x];
-    var typeData = typeOf(value);
+    var typeData = typeArray || typeOf(value);
 
     if (["array", "object", "null"].indexOf(typeData) === -1) {
       op.properties[x] = {
@@ -174,20 +218,33 @@ function buildJSONSchema(
       if (showExample === true) op.properties[x].example = value;
     } else {
       switch (typeData) {
+        //#region switchCaseArray
         case "array":
           var opProps = [];
           var result;
           var tempData = data[x];
 
-          while (typeData == "array") {
+          while (typeData == "array" || typeData instanceof Array) {
             result = handleArrayData(tempData);
 
-            opProps.push(result.opProp);
+            if (result instanceof Array) {
+              console.log("result", result[0]);
 
-            typeData = result.typeData;
+              for (var singleResult of result[0]) {
+                opProps.push(singleResult.opProp);
+              }
 
-            tempData = result.tempData;
+              break;
+            } else {
+              opProps.push(result.opProp);
+
+              typeData = result.typeData;
+
+              tempData = result.tempData;
+            }
           }
+
+          console.log("onProps", opProps);
 
           var opPropsLength = opProps.length;
 
@@ -228,15 +285,17 @@ function buildJSONSchema(
           }
 
           break;
+        //#endregion switchCaseArray
         case "object":
           op.properties[x] = buildJSONSchema(
             data[x],
             includeRequiredArray,
             includeRequiredBoolean,
-            shouldAddNullType
+            shouldAddNullType,
+            typeArray
           );
 
-          op.properties[x].type = "object";
+          op.properties[x].type = typeArray || "object";
 
           break;
         case "null":
@@ -248,7 +307,7 @@ function buildJSONSchema(
           op.properties[x].nullable = true;
 
           if (shouldAddNullType) {
-            op.properties[x].type = "null";
+            op.properties[x].type = typeArray || "null";
           }
 
           if (includeRequiredBoolean) op.properties[x].required = true;
